@@ -1,0 +1,235 @@
+#!/usr/bin/env python
+
+from clique import *
+from cluster import *
+from param import *
+
+import graph as nx
+
+import math
+import sys
+import time
+
+class SG:
+
+	def __init__(self,filename,userfilename):
+		self.loadUserDict(userfilename)
+		self.parseMatrixFile(filename)
+	
+	def loadUserDict(self,userfilename):
+		try:
+			user_file=open(userfilename, 'r')
+		except:
+			sys.exit('File open error:%s'%userfilename)
+		
+		self.userdict={}
+		for line in user_file:
+			idnameline=line.strip()
+			idname=idnameline.split('\t',2)
+			userid=""
+			username=""
+			if len(idname)==2:
+				userid=idname[0]
+				username=idname[1]
+			elif len(idname)==1:
+				userid=idname[0]
+				username=idname[0]
+			else:
+				continue
+			#print userid, username
+
+			if self.userdict.has_key(userid):
+				#print 'warning: already has ', userid, 'in userdict' 
+				continue
+			else:
+				self.userdict[userid]=username
+		#print self.userdict.keys()
+			
+	def parseMatrixFile(self,filename):
+		try:
+			matrix_file=open(filename, 'r')
+		except:
+			sys.exit('file open error:%s'%filename)
+		
+		self.social_matrix={}
+		line_num=0
+		for line in matrix_file:
+			line_num+=1
+			subject = line.strip()
+			vertex = subject.split('\t',4)
+
+			if len(vertex)!=4:
+				#print 'matrix file format error in file:',filename,'in line:',line_num
+				continue;
+
+			subject_id = vertex[0]
+			subject_distance_sum = float(vertex[1])
+			subject_connections_num = float(vertex[2])
+			subject_connections = vertex[3]
+			
+			connections=subject_connections.split(';')
+			
+			subject_connections={}
+
+			for connect in connections:
+				#if n==10:
+					#break
+				if not connect:
+					continue
+				else:
+					#n+=1
+					subject_connect=connect.split(',')
+					connect_id=subject_connect[0]
+					connect_distance=float(subject_connect[1])
+				
+					if connect_id==subject_id:
+						#print "warning: id and connect id duplicate:",subject_id,connect_id
+						continue
+					if subject_connections.has_key(connect_id):
+						#print 'warning: already has ',connect_id,' in subject_connections'
+						continue
+					else:
+						subject_connections[connect_id]=connect_distance
+						#print connect_distance
+			
+			if self.social_matrix.has_key(subject_id):
+				#print 'warning: already has ', subject_id, ' in social_matrix'
+				continue
+			else:
+				self.social_matrix[subject_id]=subject_connections
+		
+		matrix_file.close()
+
+	def social_graph(self,secondary_graph=None):
+		visit={}
+		self.edge_single={}
+		if secondary_graph==True:
+			self.G_double=nx.Graph()
+		self.G_single=nx.Graph()
+		#self.traverse_BFS(self.G, start,visit)
+		keys=self.social_matrix.keys()
+		for key in keys:
+			self.traverse_single(self.G_single, key)
+			if secondary_graph==True:
+				self.traverse_double(self.G_double, key)
+
+		if secondary_graph==True:
+			return self.G_single,self.G_double
+		else:
+			return self.G_single
+
+	def traverse_BFS(self,graph, node, visit):
+		subject_conn_dict={}
+		if self.social_matrix.has_key(node):
+			subject_conn_dict=self.social_matrix[node]
+			
+		for child in subject_conn_dict.keys():
+			if self.userdict.has_key(child) or len(self.userdict)==0:
+				clicks_num=subject_conn_dict[child]
+				visit[node]=True
+				if clicks_num > 0:
+					#w = math.log(subject_conn_dict[child])
+					w = subject_conn_dict[child]
+					if visit.has_key(child):
+						if(graph.has_edge(node,child)):
+							graph[node][child]['weight']+=w
+						else:
+							graph.add_edge(node, child, weight=w)
+					else:
+						if(graph.has_edge(node,child)):
+							graph[node][child]['weight']+=w
+						else:
+							graph.add_edge(node, child, weight=w)
+						self.traverse_BFS(graph, child, visit)
+
+	def traverse_single(self,graph, node):
+		subject_conn_dict={}
+		if self.social_matrix.has_key(node):
+			subject_conn_dict=self.social_matrix[node]
+			
+		for child in subject_conn_dict.keys():
+			if self.userdict.has_key(child) or len(self.userdict)==0:
+				clicks_num=subject_conn_dict[child]
+				if clicks_num > 0.0:
+					#w = math.log(subject_conn_dict[child])
+					w = subject_conn_dict[child]
+					if graph.has_edge(node,child):
+						graph[node][child]['weight']+=w
+					else:
+						graph.add_edge(node, child, weight=w)
+
+	def traverse_double(self,graph, node):
+		subject_conn_dict={}
+		if self.social_matrix.has_key(node):
+			subject_conn_dict=self.social_matrix[node]
+			
+		for child in subject_conn_dict.keys():
+			if self.userdict.has_key(child) or len(self.userdict)==0:
+				clicks_num=subject_conn_dict[child]
+				if clicks_num > 0.0:
+					#w = math.log(subject_conn_dict[child])
+					w = subject_conn_dict[child]
+					if self.edge_single.has_key(child+node):
+						graph.add_edge(node,child,weight=w+self.edge_single[child+node])
+					else:
+						self.edge_single[node+child]=w
+
+
+
+
+if __name__=='__main__':
+
+	default_opts={
+		'-t':(4.0,'float','clusterThresh','stop threshhold for hierarchical clustering'),
+		'-a':(150.0,'float','alterThresh','find cliques in alternative Graph proceeds alterThresh'),
+		'-m':('','str','MatrixFile','input matrix data file path'),
+		'-u':('','str','UserFile','input id<-->username file path')
+		}
+
+	p=Param(sys.argv[1:],default_opts)
+	print sys.argv
+	print p
+	p.help()
+	p.show()
+	#sg1=SG(sys.argv[1],'./test/test.name')
+	sg1=SG(p['MatrixFile'],p['UserFile'])
+	#sg2=SG(sys.argv[2],sys.argv[3])
+
+	G1_single,G1_double=sg1.social_graph(secondary_graph=True)
+	#G1_single=sg1.social_graph()
+	#G2_friend=sg2.social_graph()
+	#G2_gossip=sg2.social_graph()
+
+	print len(G1_single.nodes()),len(G1_double.nodes())
+	#sg.draw_graph(G)
+	start=time.time()
+	print 'num of keys in social matrix',len(sg1.social_matrix.keys())
+	print 'num of nodes in social graph',len(G1_single.nodes())
+	#cliques=sg1.cluster_cliques_alternative(G1_single,G2_gossip,200,'clique.info')
+	cf=CliqueFinder()
+	cf.find_cliques_alternative(G1_single,G1_double,p['alterThresh'])
+	cf.write('clique.info',G1_single)
+
+	print 'num of cliques found in social graph',len(cf.cliques)
+	print "elapsed time:%4.4fs"%(time.time()-start)
+	start=time.time()
+
+	print 'Performing hierarchical clustering(Thresh==%f):'%(p['clusterThresh'])
+	_clusters=Cluster(cf.cliques,p['clusterThresh'])
+	_clusters.cluster_hierarchy()
+	_clustersDup=Cluster(_clusters,1,norm_t='Max')
+	_clustersDup.cluster_hierarchy()
+
+	print "elapsed time:%4.4fs"%(time.time()-start)
+	Out=open('re','w')
+	n=0
+	for i in xrange(len(_clusters)):
+		n+=1
+		cc=_clustersDup[i][1]
+		if len(cc)<3:continue
+		Out.write("%d\t"%n)
+		for c in cc:
+			Out.write("%s;"%c)
+		Out.write("\n")
+	Out.close()
+	

@@ -1,0 +1,4 @@
+hadoop fs -mkdir  /user/yeyin.zhang/Cluster/cluster_data/clique20120603
+hadoop fs -mkdir  /user/yeyin.zhang/Cluster/cluster_data/resultSave20120603
+./runSimpleCliqueMR.sh  /user/yeyin.zhang/Cluster/usermatrix/usermatrix_data/part-r-00000 /user/yeyin.zhang/Cluster/cluster_data/clique20120603 >clique.log
+./runClusterMRCPP.sh  All "-input /user/yeyin.zhang/Cluster/cluster_data/clique20120603" /user/yeyin.zhang/Cluster/cluster_data/resultSave20120603 >cluster.log
